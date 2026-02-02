@@ -1,2 +1,2 @@
-# connect4-rl
+# Connect4-rl
 Hi josh
