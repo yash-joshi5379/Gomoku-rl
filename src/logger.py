@@ -14,7 +14,7 @@ class GameLogger:
 
     def log_game(self, result, num_moves, metadata=None):
         game_data = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now().strftime("%d-%b %H:%M"),
             "result": result.name,
             "num_moves": num_moves,
             "winner": result.value,
