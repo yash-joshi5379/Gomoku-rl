@@ -1,5 +1,7 @@
+# src/game.py
 import numpy as np
 from enum import Enum
+from src.config import Config
 
 
 class Player(Enum):
@@ -20,7 +22,7 @@ class GomokuGame:
         self.reset()
 
     def reset(self):
-        self.board = np.zeros((9, 9), dtype=np.int8)
+        self.board = np.zeros((Config.BOARD_SIZE, Config.BOARD_SIZE), dtype=np.int8)
         self.current_player = Player.BLACK
         self.move_history = []
         self.result = GameResult.ONGOING
@@ -63,8 +65,8 @@ class GomokuGame:
 
     def _is_legal(self, row, col):
         return (
-            0 <= row < 9
-            and 0 <= col < 15
+            0 <= row < Config.BOARD_SIZE
+            and 0 <= col < Config.BOARD_SIZE
             and self.board[row, col] == Player.EMPTY.value
             and self.result == GameResult.ONGOING
         )
@@ -78,14 +80,16 @@ class GomokuGame:
             count += self._count_consecutive(row, col, dr, dc, player)
             count += self._count_consecutive(row, col, -dr, -dc, player)
 
-            if count >= 5:
+            if count >= Config.WIN_LENGTH:
                 return True
         return False
 
     def _count_consecutive(self, row, col, dr, dc, player):
         count = 0
         r, c = row + dr, col + dc
-        while 0 <= r < 9 and 0 <= c < 9 and self.board[r, c] == player:
+        while (
+            0 <= r < Config.BOARD_SIZE and 0 <= c < Config.BOARD_SIZE and self.board[r, c] == player
+        ):
             count += 1
             r += dr
             c += dc
@@ -104,8 +108,21 @@ class GomokuGame:
         current = self.current_player.value
         opponent = Player.WHITE.value if current == Player.BLACK.value else Player.BLACK.value
 
-        state = np.zeros((3, 9, 9), dtype=np.float32)
+        state = np.zeros((3, Config.BOARD_SIZE, Config.BOARD_SIZE), dtype=np.float32)
         state[0] = self.board == current
         state[1] = self.board == opponent
-        state[2] = 1.0
+
+        if self.last_move is not None:
+            row, col = self.last_move
+            state[2, row, col] = 1.0
+
         return state
+
+    def action_to_int(self, action):
+        row, col = action
+        return row * Config.BOARD_SIZE + col
+
+    def int_to_action(self, action_int):
+        row = action_int // Config.BOARD_SIZE
+        col = action_int % Config.BOARD_SIZE
+        return (row, col)

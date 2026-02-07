@@ -1,11 +1,14 @@
+# src/logger.py
 import pandas as pd
-import json
 from pathlib import Path
 from datetime import datetime
+from src.config import Config
 
 
 class GameLogger:
-    def __init__(self, log_dir):
+    def __init__(self, log_dir=None):
+        if log_dir is None:
+            log_dir = Config.LOG_DIR
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
 

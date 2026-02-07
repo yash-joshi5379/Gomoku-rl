@@ -1,15 +1,18 @@
+# src/renderer.py
 import pygame
-import numpy as np
-from src.game import GomokuGame, Player, GameResult
+from src.game import Player, GameResult
+from src.config import Config
 
 
 class GomokuRenderer:
-    def __init__(self, game, cell_size=40):
+    def __init__(self, game):
         self.game = game
-        self.cell_size = cell_size
+        self.cell_size = 40
         self.margin = 40
-        self.width = 9 * cell_size + 2 * self.margin
-        self.height = 9 * cell_size + 2 * self.margin + 60
+        self.extra_height = 60
+
+        self.width = Config.BOARD_SIZE * self.cell_size + 2 * self.margin
+        self.height = Config.BOARD_SIZE * self.cell_size + 2 * self.margin + self.extra_height
 
         pygame.init()
         self.screen = pygame.display.set_mode((self.width, self.height))
@@ -29,20 +32,20 @@ class GomokuRenderer:
         pygame.display.flip()
 
     def _draw_grid(self):
-        for i in range(9):
+        for i in range(Config.BOARD_SIZE):
             start_x = self.margin + i * self.cell_size
             start_y = self.margin
-            end_y = self.margin + 14 * self.cell_size
+            end_y = self.margin + (Config.BOARD_SIZE - 1) * self.cell_size
             pygame.draw.line(self.screen, self.line_color, (start_x, start_y), (start_x, end_y), 1)
 
             start_y = self.margin + i * self.cell_size
             start_x = self.margin
-            end_x = self.margin + 14 * self.cell_size
+            end_x = self.margin + (Config.BOARD_SIZE - 1) * self.cell_size
             pygame.draw.line(self.screen, self.line_color, (start_x, start_y), (end_x, start_y), 1)
 
     def _draw_stones(self):
-        for row in range(9):
-            for col in range(9):
+        for row in range(Config.BOARD_SIZE):
+            for col in range(Config.BOARD_SIZE):
                 if self.game.board[row, col] != Player.EMPTY.value:
                     x = self.margin + col * self.cell_size
                     y = self.margin + row * self.cell_size
