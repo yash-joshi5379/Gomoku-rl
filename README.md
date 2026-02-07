@@ -1,16 +1,13 @@
 # Gomoku RL Environment
 
-15×15 Gomoku (Five-in-a-Row) environment for reinforcement learning coursework.
+9x9 Gomoku (Five-in-a-Row) environment for reinforcement learning coursework.
 
 ## Installation
 
 ```bash
-pip install -r requirements.txt
+conda env create -f gomoku-cpu.yml -y
+conda activate gomoku-cpu
 ```
 
-## Next Steps
-
-1. Implement agent classes (random, MCTS, neural network)
-2. Create training loop with self-play
-3. Add evaluation tournaments
-4. Generate plots from logger CSVs
+Then pip install black if you want to format your code
+(black .)

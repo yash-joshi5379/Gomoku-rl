@@ -20,7 +20,7 @@ class GomokuGame:
         self.reset()
 
     def reset(self):
-        self.board = np.zeros((15, 15), dtype=np.int8)
+        self.board = np.zeros((9, 9), dtype=np.int8)
         self.current_player = Player.BLACK
         self.move_history = []
         self.result = GameResult.ONGOING
@@ -63,7 +63,7 @@ class GomokuGame:
 
     def _is_legal(self, row, col):
         return (
-            0 <= row < 15
+            0 <= row < 9
             and 0 <= col < 15
             and self.board[row, col] == Player.EMPTY.value
             and self.result == GameResult.ONGOING
@@ -85,7 +85,7 @@ class GomokuGame:
     def _count_consecutive(self, row, col, dr, dc, player):
         count = 0
         r, c = row + dr, col + dc
-        while 0 <= r < 15 and 0 <= c < 15 and self.board[r, c] == player:
+        while 0 <= r < 9 and 0 <= c < 9 and self.board[r, c] == player:
             count += 1
             r += dr
             c += dc
@@ -104,7 +104,7 @@ class GomokuGame:
         current = self.current_player.value
         opponent = Player.WHITE.value if current == Player.BLACK.value else Player.BLACK.value
 
-        state = np.zeros((3, 15, 15), dtype=np.float32)
+        state = np.zeros((3, 9, 9), dtype=np.float32)
         state[0] = self.board == current
         state[1] = self.board == opponent
         state[2] = 1.0
