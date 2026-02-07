@@ -21,11 +21,7 @@ def count_line(game, row, col, dr, dc, color):
     """Count consecutive stones of given color in one direction from (row, col)"""
     count = 0
     r, c = row + dr, col + dc
-    while (
-        0 <= r < Config.BOARD_SIZE
-        and 0 <= c < Config.BOARD_SIZE
-        and game.board[r, c] == color
-    ):
+    while 0 <= r < Config.BOARD_SIZE and 0 <= c < Config.BOARD_SIZE and game.board[r, c] == color:
         count += 1
         r += dr
         c += dc
@@ -39,7 +35,11 @@ def get_pattern_length(game, row, col, color):
 
     for dr, dc in directions:
         # Count in both directions and add 1 for the stone itself
-        length = 1 + count_line(game, row, col, dr, dc, color) + count_line(game, row, col, -dr, -dc, color)
+        length = (
+            1
+            + count_line(game, row, col, dr, dc, color)
+            + count_line(game, row, col, -dr, -dc, color)
+        )
         max_length = max(max_length, length)
 
     return max_length
@@ -53,7 +53,11 @@ def check_blocks_opponent(game, row, col, opponent_color):
 
     for dr, dc in directions:
         # Check what the opponent line would be through this empty position
-        length = 1 + count_line(game, row, col, dr, dc, opponent_color) + count_line(game, row, col, -dr, -dc, opponent_color)
+        length = (
+            1
+            + count_line(game, row, col, dr, dc, opponent_color)
+            + count_line(game, row, col, -dr, -dc, opponent_color)
+        )
         max_blocked_length = max(max_blocked_length, length)
 
     return max_blocked_length
@@ -67,19 +71,19 @@ def calculate_shaped_reward(game, action, agent_color, opponent_color):
     threat_length = get_pattern_length(game, row, col, agent_color)
     threat_reward = 0.0
     if threat_length == 4:
-        threat_reward = 0.05
+        threat_reward = Config.THREAT_REWARD_4
     elif threat_length == 3:
-        threat_reward = 0.03
+        threat_reward = Config.THREAT_REWARD_3
     elif threat_length == 2:
-        threat_reward = 0.01
+        threat_reward = Config.THREAT_REWARD_2
 
     # Block reward: what opponent pattern did we block?
     blocked_length = check_blocks_opponent(game, row, col, opponent_color)
     block_reward = 0.0
     if blocked_length >= 4:
-        block_reward = 0.10  # Blocking a winning threat
+        block_reward = Config.BLOCK_REWARD_4
     elif blocked_length == 3:
-        block_reward = 0.04  # Blocking a strong threat
+        block_reward = Config.BLOCK_REWARD_3
 
     return threat_reward + block_reward
 
@@ -89,13 +93,13 @@ def get_reward(game_result, is_agent_black, game, action, agent_color, opponent_
     # Terminal reward
     if game_result != GameResult.ONGOING:
         if game_result == GameResult.DRAW:
-            return 0.0
+            return Config.DRAW_REWARD
 
         agent_won = (game_result == GameResult.BLACK_WIN and is_agent_black) or (
             game_result == GameResult.WHITE_WIN and not is_agent_black
         )
 
-        return 1.0 if agent_won else -1.0
+        return Config.WIN_REWARD if agent_won else Config.LOSS_REWARD
 
     # Intermediate shaped rewards
     shaped_reward = calculate_shaped_reward(game, action, agent_color, opponent_color)
@@ -127,7 +131,9 @@ def play_episode(player, opponent):
             game.step(action)
 
             # Calculate reward including shaped rewards
-            reward = get_reward(game.result, agent_is_black, game, action, agent_color.value, opponent_color.value)
+            reward = get_reward(
+                game.result, agent_is_black, game, action, agent_color.value, opponent_color.value
+            )
 
             next_state = game.get_state_for_network() if game.result == GameResult.ONGOING else None
             done = game.result != GameResult.ONGOING
@@ -152,7 +158,7 @@ def train():
     draw_count = 0
 
     # Rolling win rate tracking
-    rolling_window = deque(maxlen=500)
+    rolling_window = deque(maxlen=Config.ROLLING_WINDOW_SIZE)
     best_win_rate = 0.0
 
     for episode in trange(Config.TOTAL_EPISODES):
@@ -190,10 +196,12 @@ def train():
             rolling_window.append(0)
 
         # Calculate rolling win rate
-        rolling_win_rate = sum(rolling_window) / len(rolling_window) if len(rolling_window) > 0 else 0.0
+        rolling_win_rate = (
+            sum(rolling_window) / len(rolling_window) if len(rolling_window) > 0 else 0.0
+        )
 
         # Save best model based on rolling win rate
-        if len(rolling_window) == 500 and rolling_win_rate > best_win_rate:
+        if len(rolling_window) == Config.ROLLING_WINDOW_SIZE and rolling_win_rate > best_win_rate:
             best_win_rate = rolling_win_rate
             player.save_model(f"{Config.MODEL_DIR}/player_best.pth")
 
@@ -221,7 +229,7 @@ def train():
             loss_str = f"{avg_loss:.4f}" if avg_loss is not None else "N/A"
             print(f"Episode {episode + 1}/{Config.TOTAL_EPISODES}")
             print(f"  Win Rate: {win_rate:.3f} ({win_count}W-{loss_count}L-{draw_count}D)")
-            print(f"  Rolling Win Rate (last 500): {rolling_win_rate:.3f}")
+            print(f"  Rolling Win Rate (last {Config.ROLLING_WINDOW_SIZE}): {rolling_win_rate:.3f}")
             print(f"  Best Rolling Win Rate: {best_win_rate:.3f}")
             print(
                 f"  Epsilon: {player.epsilon:.3f}, Loss: {loss_str}, Buffer: {len(player.buffer)}"
@@ -231,10 +239,14 @@ def train():
 
     player.save_model(f"{Config.MODEL_DIR}/player_final.pth")
     logger.save()
-    print("\nTraining complete!")
+    print("\nTraining complete")
     print(f"Final Win Rate: {win_count / Config.TOTAL_EPISODES:.3f}")
     print(f"Best Rolling Win Rate: {best_win_rate:.3f}")
 
 
 if __name__ == "__main__":
-    train()
+    answer = input("Run training? (y/n): ").strip().lower()
+    if answer == "y":
+        train()
+    else:
+        print("Training cancelled to avoid overwriting existing models")

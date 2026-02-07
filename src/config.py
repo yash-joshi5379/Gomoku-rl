@@ -5,8 +5,10 @@ class Config:
     WIN_LENGTH: int = 5
 
     # Training
-    TOTAL_EPISODES: int = 5000
-    SAVE_FREQ: int = 500
+    TOTAL_EPISODES: int = 3000
+
+    SAVE_FREQ: int = 1000
+    ROLLING_WINDOW_SIZE: int = 500
 
     # DQN hyperparameters
     GAMMA: float = 0.99
@@ -20,6 +22,19 @@ class Config:
 
     # Training
     TRAIN_STEPS_PER_EPISODE: int = 4
+    GRAD_CLIP_NORM: float = 1.0
+
+    # Shaped rewards in order of how big they should be (very important for training)
+    THREAT_REWARD_2: float = 0.01  # 2 in a row is it starting a threat
+    THREAT_REWARD_3: float = 0.03  # 3 in a row is a stronger threat
+    BLOCK_REWARD_3: float = 0.04  # prefer blocking a 3 in a row to threatening a 3 in a row
+    THREAT_REWARD_4: float = 0.05  # prefer threatening a 4 in a row to blocking a 3 in a row
+    BLOCK_REWARD_4: float = 0.10  # block 4 in a row or you lose
+
+    # Terminal rewards
+    WIN_REWARD: float = 1.0
+    LOSS_REWARD: float = -1.0
+    DRAW_REWARD: float = 0.0
 
     # Paths
     MODEL_DIR: str = "./models"

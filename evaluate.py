@@ -12,9 +12,7 @@ class RandomAgent:
         return random.choice(legal_actions)
 
 
-def evaluate(player, opponent, num_games=100):
-    player.epsilon = 0.0
-
+def evaluate(player, opponent, num_games):
     wins = 0
     losses = 0
     draws = 0
@@ -52,4 +50,4 @@ if __name__ == "__main__":
 
     print("Evaluating against random opponent...")
     random_opponent = RandomAgent()
-    evaluate(player, random_opponent, num_games=100)
+    evaluate(player, random_opponent, 10000)
