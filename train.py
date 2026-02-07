@@ -128,7 +128,26 @@ def play_episode(player, opponent):
             action = player.select_action(game)
             action_int = game.action_to_int(action)
 
+            # PRINT BEFORE STEP
+            #print(f"\n=== BEFORE AGENT MOVE ===")
+            #print(f"Agent color: {agent_color}")
+            #print(f"Current player: {game.current_player}")
+            #print(f"State channel 0 (should be agent): sum = {state[0].sum()}")
+            #print(f"State channel 1 (should be opponent): sum = {state[1].sum()}")
+
             game.step(action)
+
+            # PRINT AFTER STEP
+            #print(f"\n=== AFTER AGENT MOVE ===")
+            #print(f"Current player: {game.current_player}")
+            
+            next_state = game.get_state_for_network(perspective_color=agent_color) if game.result == GameResult.ONGOING else None
+            
+            if next_state is not None:
+                pass
+                #print(f"Next state channel 0 sum: {next_state[0].sum()}")
+                #print(f"Next state channel 1 sum: {next_state[1].sum()}")
+                #print(f"Does next_state[0] match agent pieces? {(next_state[0].sum() == (game.board == agent_color.value).sum())}")
 
             # Calculate reward including shaped rewards
             reward = get_reward(

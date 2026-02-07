@@ -100,18 +100,21 @@ class GomokuGame:
         game.last_move = self.last_move
         return game
 
-    def get_state_for_network(self):
-        current = self.current_player.value
-        opponent = Color.WHITE.value if current == Color.BLACK.value else Color.BLACK.value
-
+    def get_state_for_network(self, perspective_color=None):
+        """Get state from perspective of current player or specified color"""
+        if perspective_color is None:
+            perspective_color = self.current_player
+        
+        opponent = Color.WHITE if perspective_color == Color.BLACK else Color.BLACK
+        
         state = np.zeros((3, Config.BOARD_SIZE, Config.BOARD_SIZE), dtype=np.float32)
-        state[0] = self.board == current
-        state[1] = self.board == opponent
-
+        state[0] = self.board == perspective_color.value
+        state[1] = self.board == opponent.value
+        
         if self.last_move is not None:
             row, col = self.last_move
             state[2, row, col] = 1.0
-
+        
         return state
 
     def action_to_int(self, action):
