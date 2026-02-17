@@ -118,15 +118,31 @@ def play_episode(player, opponent):
 
     episode_transitions = []
 
+    last_agent_state = None
+    last_agent_action = None
+    last_agent_reward = 0.0
+
+    #these are buffer variables to track the agent while we wait for the opponent to move
+
     while game.result == GameResult.ONGOING:
         is_agent_turn = (game.current_player == Color.BLACK and agent_is_black) or (
             game.current_player == Color.WHITE and not agent_is_black
         )
 
         if is_agent_turn:
-            state = game.get_state_for_network()
+            # state = game.get_state_for_network()
+
+            current_state = game.get_state_for_network(perspective_color=agent_color)  # get state from agent's perspective
+
+            if last_agent_state is not None:
+                episode_transitions.append(
+                    (last_agent_state, last_agent_action, last_agent_reward, current_state, False)
+                )
+
             action = player.select_action(game)
             action_int = game.action_to_int(action)
+
+            state_before_move = current_state
 
             # PRINT BEFORE STEP
             #print(f"\n=== BEFORE AGENT MOVE ===")
@@ -142,27 +158,53 @@ def play_episode(player, opponent):
             #print(f"Current player: {game.current_player}")
 
             # Calculate reward including shaped rewards
-            reward = get_reward(
-                game.result, agent_is_black, game, action, agent_color.value, opponent_color.value
+
+            step_reward = calculate_shaped_reward(
+                game, action, agent_color.value, opponent_color.value
             )
 
-            next_state = (
-                game.get_state_for_network(perspective_color=agent_color)  # crucial to get next state from agent's perspective
-                if game.result == GameResult.ONGOING
-                else None
-            )
-            done = game.result != GameResult.ONGOING
 
-            if next_state is not None:
-                pass
-                #print(f"Next state channel 0 sum: {next_state[0].sum()}")
-                #print(f"Next state channel 1 sum: {next_state[1].sum()}")
-                #print(f"Does next_state[0] match agent pieces? {(next_state[0].sum() == (game.board == agent_color.value).sum())}")
+            if game.result != GameResult.ONGOING:
+                final_reward = Config.WIN_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
 
-            episode_transitions.append((state, action_int, reward, next_state, done))
+                episode_transitions.append(
+                    (state_before_move, action_int, final_reward, None, True)
+                )
+            else:
+                last_agent_state = state_before_move 
+                last_agent_action = action_int
+                last_agent_reward = step_reward
+        
         else:
-            action = opponent.select_action(game)
-            game.step(action)
+            if game.result != GameResult.ONGOING:
+
+                outcome_reward = Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
+                final_reward = last_agent_reward + outcome_reward
+
+                episode_transitions.append(
+                    (last_agent_state, last_agent_action, final_reward, None, True)
+                )
+            # reward = get_reward(
+            #     game.result, agent_is_black, game, action, agent_color.value, opponent_color.value
+            # )
+
+        #     next_state = (
+        #         game.get_state_for_network(perspective_color=agent_color)  # crucial to get next state from agent's perspective
+        #         if game.result == GameResult.ONGOING
+        #         else None
+        #     )
+        #     done = game.result != GameResult.ONGOING
+
+        #     if next_state is not None:
+        #         pass
+        #         #print(f"Next state channel 0 sum: {next_state[0].sum()}")
+        #         #print(f"Next state channel 1 sum: {next_state[1].sum()}")
+        #         #print(f"Does next_state[0] match agent pieces? {(next_state[0].sum() == (game.board == agent_color.value).sum())}")
+
+        #     episode_transitions.append((state, action_int, reward, next_state, done))
+        # else:
+        #     action = opponent.select_action(game)
+        #     game.step(action)
 
     return episode_transitions, game.result, len(game.move_history), agent_is_black
 
