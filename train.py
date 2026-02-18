@@ -8,7 +8,6 @@ from src.config import Config
 import random
 import numpy as np
 from tqdm import trange
-from collections import deque
 
 
 class RandomAgent:
@@ -222,10 +221,6 @@ def train():
     loss_count = 0
     draw_count = 0
 
-    # Rolling win rate tracking
-    rolling_window = deque(maxlen=Config.ROLLING_WINDOW_SIZE)
-    best_win_rate = 0.0
-
     for episode in trange(Config.TOTAL_EPISODES):
         opponent = random_opponent
 
@@ -246,29 +241,16 @@ def train():
 
         player.decay_epsilon()
 
-        # Track win rate
+        # Track win/loss/draw
         agent_won = (result == GameResult.BLACK_WIN and agent_is_black) or (
             result == GameResult.WHITE_WIN and not agent_is_black
         )
         if result == GameResult.DRAW:
             draw_count += 1
-            rolling_window.append(0)
         elif agent_won:
             win_count += 1
-            rolling_window.append(1)
         else:
             loss_count += 1
-            rolling_window.append(0)
-
-        # Calculate rolling win rate
-        rolling_win_rate = (
-            sum(rolling_window) / len(rolling_window) if len(rolling_window) > 0 else 0.0
-        )
-
-        # Save best model based on rolling win rate
-        if len(rolling_window) == Config.ROLLING_WINDOW_SIZE and rolling_win_rate > best_win_rate:
-            best_win_rate = rolling_win_rate
-            player.save_model(f"{Config.MODEL_DIR}/player_best.pth")
 
         logger.log_game(
             result,
@@ -283,35 +265,26 @@ def train():
                     "loss": avg_loss,
                     "epsilon": player.epsilon,
                     "win_rate": win_count / (episode + 1),
-                    "rolling_win_rate": rolling_win_rate,
                     "buffer_size": len(player.buffer),
                 },
             )
 
-        if (episode + 1) % Config.SAVE_FREQ == 0:
+        if (episode + 1) % Config.PRINT_FREQUENCY == 0:
             total_games = episode + 1
             win_rate = win_count / total_games
             loss_str = f"{avg_loss:.4f}" if avg_loss is not None else "N/A"
             print(f"Episode {episode + 1}/{Config.TOTAL_EPISODES}")
             print(f"  Win Rate: {win_rate:.3f} ({win_count}W-{loss_count}L-{draw_count}D)")
-            print(f"  Rolling Win Rate (last {Config.ROLLING_WINDOW_SIZE}): {rolling_win_rate:.3f}")
-            print(f"  Best Rolling Win Rate: {best_win_rate:.3f}")
             print(
                 f"  Epsilon: {player.epsilon:.3f}, Loss: {loss_str}, Buffer: {len(player.buffer)}"
             )
             logger.save()
-            player.save_model(f"{Config.MODEL_DIR}/player_ep{episode+1}.pth")
 
-    player.save_model(f"{Config.MODEL_DIR}/player_final.pth")
+    player.save_model(f"{Config.MODEL_DIR}/checkpoint_random.pth")
     logger.save()
     print("\nTraining complete")
     print(f"Final Win Rate: {win_count / Config.TOTAL_EPISODES:.3f}")
-    print(f"Best Rolling Win Rate: {best_win_rate:.3f}")
 
 
 if __name__ == "__main__":
-    answer = input("Run training? (y/n): ").strip().lower()
-    if answer == "y":
-        train()
-    else:
-        print("Training cancelled to avoid overwriting existing models")
+    train()

@@ -6,10 +6,7 @@ class Config:
 
     # Number of training episodes
     TOTAL_EPISODES: int = 1000
-
-    # How often to check the progress, and save the best rolling model
-    SAVE_FREQ: int = 1000
-    ROLLING_WINDOW_SIZE: int = 500
+    PRINT_FREQUENCY: int = 100
 
     # DQN hyperparameters
     GAMMA: float = 0.99
