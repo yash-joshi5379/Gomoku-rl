@@ -2,13 +2,12 @@ import random
 import pygame
 from src.game import Game, GameResult
 from src.logger import Logger
-from src.renderer import GomokuRenderer
+from src.renderer import Renderer
 
 
 def play_random_game():
     game = Game()
-    renderer = GomokuRenderer(game)
-    logger = Logger("logs")
+    renderer = Renderer(game)
 
     clock = pygame.time.Clock()
     running = True
@@ -28,11 +27,8 @@ def play_random_game():
         clock.tick(5)  # 5 moves per second
 
         if game.result != GameResult.ONGOING:
-            pygame.time.wait(2000)  # Wait 2 seconds to show result
+            pygame.time.wait(2000)
             running = False
-
-    logger.log_game(game.result, len(game.move_history))
-    logger.save()
 
     print(f"Game finished: {game.result.name}")
     print(f"Total moves: {len(game.move_history)}")

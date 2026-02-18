@@ -4,7 +4,7 @@ from src.game import Color, GameResult
 from src.config import Config
 
 
-class GomokuRenderer:
+class Renderer:
     def __init__(self, game):
         self.game = game
         self.cell_size = 40
