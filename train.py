@@ -1,6 +1,7 @@
 # train.py
 import torch
 import os
+from collections import deque
 from src.game import Game, GameResult, Color
 from src.network import DQNAgent
 from src.logger import Logger
@@ -189,15 +190,13 @@ def train():
     player = DQNAgent()
     random_opponent = RandomAgent()
     logger = Logger()
-
-    win_count = 0
-    loss_count = 0
-    draw_count = 0
+    recent_outcomes = deque(maxlen=100)
+    recent_rewards = deque(maxlen=100)
 
     for episode in trange(Config.TOTAL_EPISODES):
         opponent = random_opponent
 
-        transitions, result, num_moves, agent_is_black = play_episode(player, opponent)
+        transitions, result, _, agent_is_black = play_episode(player, opponent)
 
         # Store all transitions
         for state, action, reward, next_state, done in transitions:
@@ -210,53 +209,50 @@ def train():
             if loss is not None:
                 losses.append(loss)
 
-        avg_loss = np.mean(losses) if losses else None
+        avg_loss = np.mean(losses) if losses else 0.0
 
         player.decay_epsilon()
 
-        # Track win/loss/draw
-        agent_won = (result == GameResult.BLACK_WIN and agent_is_black) or (
+        # Process outcome
+        won = (result == GameResult.BLACK_WIN and agent_is_black) or (
             result == GameResult.WHITE_WIN and not agent_is_black
         )
-        if result == GameResult.DRAW:
-            draw_count += 1
-        elif agent_won:
-            win_count += 1
-        else:
-            loss_count += 1
 
-        logger.log_game(
-            result,
-            num_moves,
-            metadata={"episode": episode, "agent_color": "BLACK" if agent_is_black else "WHITE"},
+        outcome = "D"
+        if result != GameResult.DRAW:
+            outcome = "W" if won else "L"
+
+        # Log to the csv
+        logger.log_episode(
+            {
+                "episode": episode + 1,
+                "outcome": outcome,
+                "reward": round(sum(t[2] for t in transitions), 3),
+                "loss": round(avg_loss, 3),
+                "epsilon": round(player.epsilon, 3),
+                "buffer": len(player.buffer),
+            }
         )
 
-        if avg_loss is not None:
-            logger.log_episode(
-                episode,
-                {
-                    "loss": avg_loss,
-                    "epsilon": player.epsilon,
-                    "win_rate": win_count / (episode + 1),
-                    "buffer_size": len(player.buffer),
-                },
-            )
+        recent_outcomes.append(outcome)  # Win Loss or Draw
+        recent_rewards.append(sum(t[2] for t in transitions))  # t[2] is the reward, S A R S' done
 
+        # Print the moving averages every PRINT_FREQUENCY episodes
         if (episode + 1) % Config.PRINT_FREQUENCY == 0:
-            total_games = episode + 1
-            win_rate = win_count / total_games
-            loss_str = f"{avg_loss:.4f}" if avg_loss is not None else "N/A"
-            print(f"Episode {episode + 1}/{Config.TOTAL_EPISODES}")
-            print(f"  Win Rate: {win_rate:.3f} ({win_count}W-{loss_count}L-{draw_count}D)")
+            wr = recent_outcomes.count("W") / len(recent_outcomes)
+            lr = recent_outcomes.count("L") / len(recent_outcomes)
+            dr = recent_outcomes.count("D") / len(recent_outcomes)
+            reward = np.mean(recent_rewards) if recent_rewards else 0.0
+
+            print(f"\nEpisode {episode + 1}, W L D: {wr:.2f} - {lr:.2f} - {dr:.2f}")
             print(
-                f"  Epsilon: {player.epsilon:.3f}, Loss: {loss_str}, Buffer: {len(player.buffer)}"
+                f"Reward: {reward:.3f}, Epsilon: {player.epsilon:.3f}, Loss: {avg_loss:.3f}, Buffer: {len(player.buffer)}"
             )
             logger.save()
 
     player.save_model(f"{Config.MODEL_DIR}/checkpoint_random.pth")
     logger.save()
     print("\nTraining complete")
-    print(f"Final Win Rate: {win_count / Config.TOTAL_EPISODES:.3f}")
 
 
 if __name__ == "__main__":
