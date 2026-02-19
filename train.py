@@ -78,15 +78,27 @@ def play_episode(player, opponent):
                 last_agent_action = action_int
                 last_agent_reward = step_reward
 
+        # else opponent's turn
         else:
             action = opponent.select_action(game)
             game.step(action)
-            if game.result != GameResult.ONGOING:
 
-                outcome_reward = (
+            # opponent wins
+            if game.result != GameResult.ONGOING:
+                # Not sure if we should give shaped reward here - Kishan
+
+                # outcome_reward = (
+                #     Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
+                # )
+                # final_reward = last_agent_reward + outcome_reward
+
+                # episode_transitions.append(
+                #     (last_agent_state, last_agent_action, final_reward, None, True)
+                # )
+
+                final_reward = (
                     Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
-                final_reward = last_agent_reward + outcome_reward
 
                 episode_transitions.append(
                     (last_agent_state, last_agent_action, final_reward, None, True)
