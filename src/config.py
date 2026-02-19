@@ -4,21 +4,21 @@ class Config:
     BOARD_SIZE: int = 9
     WIN_LENGTH: int = 5
 
-    # Number of training episodes
-    TOTAL_EPISODES: int = 1000
+    # Episodes and printing
+    TOTAL_EPISODES: int = 2000
     PRINT_FREQUENCY: int = 100
 
-    # DQN hyperparameters
+    # Hyperparameters
     GAMMA: float = 0.99
     EPSILON_START: float = 1.0
     EPSILON_END: float = 0.1
     EPSILON_DECAY: float = 0.999
+
+    # Training and replay buffer
     LEARNING_RATE: float = 5e-5
     BATCH_SIZE: int = 64
     BUFFER_CAPACITY: int = 100_000
     TARGET_UPDATE_FREQ: int = 1000
-
-    # Training the network for multiple steps per episode can help it learn better long-term strategies, but it also makes training slower
     TRAIN_STEPS_PER_EPISODE: int = 4
     GRAD_CLIP_NORM: float = 1.0
 

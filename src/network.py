@@ -8,25 +8,45 @@ from src.buffer import ReplayBuffer
 from src.config import Config
 
 
+class ResBlock(nn.Module):
+    def __init__(self, channels):
+        super().__init__()
+        self.conv1 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(channels)
+        self.conv2 = nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(channels)
+
+    def forward(self, x):
+        residual = x
+        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.bn2(self.conv2(x))
+        return F.relu(x + residual)
+
+
 class QNetwork(nn.Module):
-    def __init__(self):
-        super(QNetwork, self).__init__()
+    def __init__(self, num_res_blocks=4, channels=64):
+        super().__init__()
 
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=3, padding=1)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.conv3 = nn.Conv2d(64, 64, kernel_size=3, padding=1)
+        # Stem: project input channels up to working channel size
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(),
+        )
 
-        self.fc1 = nn.Linear(64 * Config.BOARD_SIZE * Config.BOARD_SIZE, 256)
+        # Residual block tower
+        self.res_blocks = nn.Sequential(*[ResBlock(channels) for _ in range(num_res_blocks)])
+
+        # Output head
+        self.fc1 = nn.Linear(channels * Config.BOARD_SIZE * Config.BOARD_SIZE, 256)
         self.fc2 = nn.Linear(256, Config.BOARD_SIZE * Config.BOARD_SIZE)
 
     def forward(self, x):
-        x = F.relu(self.conv1(x))
-        x = F.relu(self.conv2(x))
-        x = F.relu(self.conv3(x))
-        x = x.view(-1, 64 * Config.BOARD_SIZE * Config.BOARD_SIZE)
+        x = self.stem(x)
+        x = self.res_blocks(x)
+        x = x.view(x.size(0), -1)
         x = F.relu(self.fc1(x))
-        x = self.fc2(x)
-        return x
+        return self.fc2(x)
 
 
 class DQNAgent:
@@ -97,11 +117,10 @@ class DQNAgent:
             target_q = rewards + (1 - dones) * self.gamma * next_q_target
 
         loss = F.smooth_l1_loss(current_q, target_q)
-        # loss = F.mse_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), 1.0)
+        torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), Config.GRAD_CLIP_NORM)
         self.optimizer.step()
 
         self.update_counter += 1
