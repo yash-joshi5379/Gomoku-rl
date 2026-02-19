@@ -98,6 +98,12 @@ def play_episode(player, opponent):
 def train():
     os.makedirs(Config.MODEL_DIR, exist_ok=True)
 
+    # Set seeds for reproducibility
+    torch.manual_seed(42)
+    torch.cuda.manual_seed(42)
+    random.seed(42)
+    np.random.seed(42)
+
     player = DQNAgent()
     random_opponent = RandomAgent()
     logger = Logger()
