@@ -136,5 +136,5 @@ class DQNAgent:
         torch.save(self.q_network.state_dict(), filepath)
 
     def load_model(self, filepath):
-        self.q_network.load_state_dict(torch.load(filepath, map_location=self.device))
+        self.q_network.load_state_dict(torch.load(filepath, map_location=self.device, weights_only=True))
         self.target_network.load_state_dict(self.q_network.state_dict())

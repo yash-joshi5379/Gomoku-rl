@@ -33,16 +33,21 @@ def load_pool_opponent(checkpoint_path):
     return opponent
 
 
-def select_opponent(pool):
+def select_opponent(pool, opponent_cache):
     """
     80/20 rule: pick the newest checkpoint most of the time,
     occasionally pick a random older one to prevent forgetting.
+    Each checkpoint is loaded from disk exactly once and cached in memory.
     """
     if len(pool) == 1 or random.random() > Config.OLD_OPPONENT_CHANCE:
-        path = pool[-1]  # N-1 checkpoint (newest opponent)
+        path = pool[-1]  # newest opponent
     else:
-        path = random.choice(pool[:-1])  # older opponent
-    return load_pool_opponent(path)
+        path = random.choice(pool[:-1])  # random older opponent
+
+    if path not in opponent_cache:
+        opponent_cache[path] = load_pool_opponent(path)
+
+    return opponent_cache[path]
 
 
 def play_episode(player, opponent):
@@ -125,6 +130,7 @@ def train():
 
     stage = Stage.RANDOM
     opponent_pool = []
+    opponent_cache = {}
 
     for episode in trange(Config.TOTAL_EPISODES):
 
@@ -140,7 +146,7 @@ def train():
         if stage == Stage.RANDOM:
             opponent = random_opponent
         else:
-            opponent = select_opponent(opponent_pool)
+            opponent = select_opponent(opponent_pool, opponent_cache)
 
         transitions, result, _, agent_is_black = play_episode(player, opponent)
 
@@ -161,7 +167,7 @@ def train():
         player.decay_epsilon()
 
         # Stage 2 checkpointing
-        if stage == Stage.SELFPLAY and (episode + 1) % Config.CHECKPOINT_INTERVAL == 0:
+        if stage == Stage.SELFPLAY and (episode + 1 - Config.RANDOM_EPISODES) % Config.CHECKPOINT_INTERVAL == 0:
             checkpoint_idx = len(opponent_pool)
             checkpoint_path = f"{Config.MODEL_DIR}/checkpoint_{checkpoint_idx}.pth"
             player.save_model(checkpoint_path)
