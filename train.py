@@ -2,6 +2,7 @@
 import torch
 import os
 from collections import deque
+from enum import Enum, auto
 from src.game import Game, GameResult, Color
 from src.network import DQNAgent
 from src.logger import Logger
@@ -13,17 +14,41 @@ import numpy as np
 from tqdm import trange
 
 
+class Stage(Enum):
+    RANDOM = auto()
+    SELFPLAY = auto()
+
+
 class RandomAgent:
     def select_action(self, game):
         legal_actions = game.get_legal_actions()
         return random.choice(legal_actions)
 
 
+def load_pool_opponent(checkpoint_path):
+    """Load a frozen opponent from a checkpoint path and force its epsilon."""
+    opponent = DQNAgent()
+    opponent.load_model(checkpoint_path)
+    opponent.epsilon = Config.OPPONENT_EPSILON
+    return opponent
+
+
+def select_opponent(pool):
+    """
+    80/20 rule: pick the newest checkpoint most of the time,
+    occasionally pick a random older one to prevent forgetting.
+    """
+    if len(pool) == 1 or random.random() > Config.OLD_OPPONENT_CHANCE:
+        path = pool[-1]  # N-1 checkpoint (newest opponent)
+    else:
+        path = random.choice(pool[:-1])  # older opponent
+    return load_pool_opponent(path)
+
+
 def play_episode(player, opponent):
     game = Game()
     game.reset()
 
-    # Randomize which color the agent plays
     agent_is_black = random.random() < 0.5
     agent_color = Color.BLACK if agent_is_black else Color.WHITE
     opponent_color = Color.WHITE if agent_is_black else Color.BLACK
@@ -34,19 +59,13 @@ def play_episode(player, opponent):
     last_agent_action = None
     last_agent_reward = 0.0
 
-    # these are buffer variables to track the agent while we wait for the opponent to move
-
     while game.result == GameResult.ONGOING:
         is_agent_turn = (game.current_player == Color.BLACK and agent_is_black) or (
             game.current_player == Color.WHITE and not agent_is_black
         )
 
         if is_agent_turn:
-            # state = game.get_state_for_network()
-
-            current_state = game.get_state_for_network(
-                perspective_color=agent_color
-            )  # get state from agent's perspective
+            current_state = game.get_state_for_network(perspective_color=agent_color)
 
             if last_agent_state is not None:
                 episode_transitions.append(
@@ -55,12 +74,9 @@ def play_episode(player, opponent):
 
             action = player.select_action(game)
             action_int = game.action_to_int(action)
-
             state_before_move = current_state
 
             game.step(action)
-
-            # Calculate reward including shaped rewards
 
             step_reward = calculate_shaped_reward(
                 game, action, agent_color.value, opponent_color.value
@@ -70,7 +86,6 @@ def play_episode(player, opponent):
                 final_reward = (
                     Config.WIN_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
-
                 episode_transitions.append(
                     (state_before_move, action_int, final_reward, None, True)
                 )
@@ -79,17 +94,14 @@ def play_episode(player, opponent):
                 last_agent_action = action_int
                 last_agent_reward = step_reward
 
-        # else opponent's turn
         else:
             action = opponent.select_action(game)
             game.step(action)
 
-            # opponent wins
             if game.result != GameResult.ONGOING:
                 final_reward = (
                     Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
-
                 episode_transitions.append(
                     (last_agent_state, last_agent_action, final_reward, None, True)
                 )
@@ -100,7 +112,6 @@ def play_episode(player, opponent):
 def train():
     os.makedirs(Config.MODEL_DIR, exist_ok=True)
 
-    # Set seeds for reproducibility
     torch.manual_seed(Config.RANDOM_SEED)
     torch.cuda.manual_seed(Config.RANDOM_SEED)
     random.seed(Config.RANDOM_SEED)
@@ -112,12 +123,28 @@ def train():
     recent_outcomes = deque(maxlen=Config.OUTCOMES_MAXLEN)
     recent_rewards = deque(maxlen=Config.REWARDS_MAXLEN)
 
+    stage = Stage.RANDOM
+    opponent_pool = []
+
     for episode in trange(Config.TOTAL_EPISODES):
-        opponent = random_opponent
+
+        # Stage switch
+        if stage == Stage.RANDOM and episode >= Config.RANDOM_EPISODES:
+            stage = Stage.SELFPLAY
+            checkpoint_path = f"{Config.MODEL_DIR}/checkpoint_0.pth"
+            player.save_model(checkpoint_path)
+            opponent_pool.append(checkpoint_path)
+            print(f"\n[{stage.name}] Switching to self-play at episode {episode}")
+
+        # Opponent selection
+        if stage == Stage.RANDOM:
+            opponent = random_opponent
+        else:
+            opponent = select_opponent(opponent_pool)
 
         transitions, result, _, agent_is_black = play_episode(player, opponent)
 
-        # Store all transitions
+        # Store all transitions with 8-fold symmetry
         for state, action, reward, next_state, done in transitions:
             for sym in get_symmetric_transitions(state, action, reward, next_state, done):
                 player.store_transition(*sym)
@@ -133,16 +160,24 @@ def train():
 
         player.decay_epsilon()
 
+        # Stage 2 checkpointing
+        if stage == Stage.SELFPLAY and (episode + 1) % Config.CHECKPOINT_INTERVAL == 0:
+            checkpoint_idx = len(opponent_pool)
+            checkpoint_path = f"{Config.MODEL_DIR}/checkpoint_{checkpoint_idx}.pth"
+            player.save_model(checkpoint_path)
+            opponent_pool.append(checkpoint_path)
+            print(
+                f"\n[{stage.name}] Saved checkpoint_{checkpoint_idx}.pth (pool size: {len(opponent_pool)})"
+            )
+
         # Process outcome
         won = (result == GameResult.BLACK_WIN and agent_is_black) or (
             result == GameResult.WHITE_WIN and not agent_is_black
         )
-
         outcome = "D"
         if result != GameResult.DRAW:
             outcome = "W" if won else "L"
 
-        # Log to the csv
         logger.log_episode(
             {
                 "episode": episode + 1,
@@ -154,25 +189,21 @@ def train():
             }
         )
 
-        recent_outcomes.append(outcome)  # Win Loss or Draw
-        recent_rewards.append(sum(t[2] for t in transitions))  # t[2] is the reward, S A R S' done
+        recent_outcomes.append(outcome)
+        recent_rewards.append(sum(t[2] for t in transitions))
 
-        # Print the moving averages every PRINT_FREQUENCY episodes
         if (episode + 1) % Config.PRINT_FREQUENCY == 0:
             wr = recent_outcomes.count("W") / len(recent_outcomes)
             lr = recent_outcomes.count("L") / len(recent_outcomes)
             dr = recent_outcomes.count("D") / len(recent_outcomes)
             reward = np.mean(recent_rewards) if recent_rewards else 0.0
 
-            print(f"\nEpisode {episode + 1}, W L D: {wr:.2f} - {lr:.2f} - {dr:.2f}")
+            print(f"\nEpisode {episode + 1} [{stage.name}], W L D: {wr:.2f} - {lr:.2f} - {dr:.2f}")
             print(
                 f"Reward: {reward:.3f}, Epsilon: {player.epsilon:.3f}, Loss: {avg_loss:.3f}, Buffer: {len(player.buffer)}"
             )
             logger.save()
 
-    recent_outcomes.clear()
-    recent_rewards.clear()
-    player.save_model(f"{Config.MODEL_DIR}/checkpoint_0.pth")
     logger.save()
     print("\nTraining complete")
 

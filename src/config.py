@@ -5,8 +5,17 @@ class Config:
     WIN_LENGTH: int = 5
     RANDOM_SEED: int = 42  # for reproducibility
 
-    # Episodes and printing
-    TOTAL_EPISODES: int = 800
+    # Episodes
+    TOTAL_EPISODES: int = 4800
+    RANDOM_EPISODES: int = 800
+
+    # Self-play (after random episodes)
+    CHECKPOINT_INTERVAL: int = 2500  # episodes between saving a new pool checkpoint
+    OPPONENT_EPSILON: float = 0.02  # forced epsilon for all frozen pool opponents
+    RANDOM_COMPLETE: float = 0.95  # win rate vs random that triggers phase switch
+    OLD_OPPONENT_CHANCE: float = 0.20  # probability of picking an old opponent (not N-1)
+
+    # Printing/logging
     PRINT_FREQUENCY: int = 100
     OUTCOMES_MAXLEN: int = 100  # for tracking recent outcomes
     REWARDS_MAXLEN: int = 100  # for tracking recent rewards
