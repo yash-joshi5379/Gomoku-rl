@@ -24,11 +24,19 @@ class Renderer:
         self.white_color = (255, 255, 255)
         self.last_move_color = (255, 0, 0)
 
-    def render(self):
+    def pixel_to_cell(self, x, y):
+        """Convert pixel coordinates to board (row, col), or None if out of bounds."""
+        col = round((x - self.margin) / self.cell_size)
+        row = round((y - self.margin) / self.cell_size)
+        if 0 <= row < Config.BOARD_SIZE and 0 <= col < Config.BOARD_SIZE:
+            return (row, col)
+        return None
+
+    def render(self, status=None):
         self.screen.fill(self.bg_color)
         self._draw_grid()
         self._draw_stones()
-        self._draw_info()
+        self._draw_info(status)
         pygame.display.flip()
 
     def _draw_grid(self):
@@ -65,10 +73,12 @@ class Renderer:
                             3,
                         )
 
-    def _draw_info(self):
+    def _draw_info(self, status=None):
         font = pygame.font.Font(None, 32)
 
-        if self.game.result == GameResult.ONGOING:
+        if status is not None:
+            text = font.render(status, True, self.line_color)
+        elif self.game.result == GameResult.ONGOING:
             player_text = "Black" if self.game.current_player == Color.BLACK else "White"
             text = font.render(
                 f"Current: {player_text} | Moves: {len(self.game.move_history)}",
@@ -76,11 +86,11 @@ class Renderer:
                 self.line_color,
             )
         elif self.game.result == GameResult.BLACK_WIN:
-            text = font.render("Black Wins", True, self.line_color)
+            text = font.render("Black Wins!", True, self.line_color)
         elif self.game.result == GameResult.WHITE_WIN:
-            text = font.render("White Wins", True, self.line_color)
+            text = font.render("White Wins!", True, self.line_color)
         else:
-            text = font.render("Draw", True, self.line_color)
+            text = font.render("Draw!", True, self.line_color)
 
         self.screen.blit(text, (self.margin, self.height - 50))
 
