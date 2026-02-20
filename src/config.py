@@ -6,7 +6,7 @@ class Config:
     RANDOM_SEED: int = 42  # for reproducibility
 
     # Episodes and printing
-    TOTAL_EPISODES: int = 1000
+    TOTAL_EPISODES: int = 800
     PRINT_FREQUENCY: int = 100
     OUTCOMES_MAXLEN: int = 100  # for tracking recent outcomes
     REWARDS_MAXLEN: int = 100  # for tracking recent rewards

@@ -7,6 +7,7 @@ from src.network import DQNAgent
 from src.logger import Logger
 from src.config import Config
 from src.rewards import calculate_shaped_reward
+from src.symmetry import get_symmetric_transitions
 import random
 import numpy as np
 from tqdm import trange
@@ -85,17 +86,6 @@ def play_episode(player, opponent):
 
             # opponent wins
             if game.result != GameResult.ONGOING:
-                # Not sure if we should give shaped reward here - Kishan
-
-                # outcome_reward = (
-                #     Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
-                # )
-                # final_reward = last_agent_reward + outcome_reward
-
-                # episode_transitions.append(
-                #     (last_agent_state, last_agent_action, final_reward, None, True)
-                # )
-
                 final_reward = (
                     Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
@@ -129,7 +119,8 @@ def train():
 
         # Store all transitions
         for state, action, reward, next_state, done in transitions:
-            player.store_transition(state, action, reward, next_state, done)
+            for sym in get_symmetric_transitions(state, action, reward, next_state, done):
+                player.store_transition(*sym)
 
         # Multiple training steps per episode
         losses = []
@@ -179,7 +170,9 @@ def train():
             )
             logger.save()
 
-    player.save_model(f"{Config.MODEL_DIR}/checkpoint_random.pth")
+    recent_outcomes.clear()
+    recent_rewards.clear()
+    player.save_model(f"{Config.MODEL_DIR}/checkpoint_0.pth")
     logger.save()
     print("\nTraining complete")
 
