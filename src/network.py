@@ -27,17 +27,14 @@ class QNetwork(nn.Module):
     def __init__(self, num_res_blocks=4, channels=64):
         super().__init__()
 
-        # Stem: project input channels up to working channel size
         self.stem = nn.Sequential(
             nn.Conv2d(3, channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(channels),
             nn.ReLU(),
         )
 
-        # Residual block tower
         self.res_blocks = nn.Sequential(*[ResBlock(channels) for _ in range(num_res_blocks)])
 
-        # Output head
         self.fc1 = nn.Linear(channels * Config.BOARD_SIZE * Config.BOARD_SIZE, 256)
         self.fc2 = nn.Linear(256, Config.BOARD_SIZE * Config.BOARD_SIZE)
 
@@ -110,17 +107,30 @@ class DQNAgent:
 
         with torch.no_grad():
             next_q_online = self.q_network(next_states)
+            
+            # ACTION MASKING FIX: We need to mask out illegal actions in next_q_online before taking argmax
+            # next_states[:, 0] is current player stones, next_states[:, 1] is opponent stones
+            # A square is occupied (illegal) if either is 1. We sum them and check > 0.
+            # Then we flatten to shape (batch_size, 81) to match next_q_online
+            occupied = (next_states[:, 0] + next_states[:, 1] > 0).view(states.shape[0], -1)
+            
+            # Apply a massive penalty to the Q-values of illegal moves
+            next_q_online = next_q_online.masked_fill(occupied, -1e9)
+            
+            # Now argmax will safely pick the best *legal* move
             next_actions = next_q_online.argmax(dim=1)
+            
             next_q_target = (
                 self.target_network(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
             )
+            
+            # Reverted to standard 1-step return (Back to Basics)
             target_q = rewards + (1 - dones) * self.gamma * next_q_target
 
         loss = F.smooth_l1_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
         loss.backward()
-        # torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), Config.GRAD_CLIP_NORM)
         self.optimizer.step()
 
         self.update_counter += 1

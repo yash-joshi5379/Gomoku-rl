@@ -7,7 +7,7 @@ class Config:
 
     # Episodes
     RANDOM_EPISODES: int = 1000
-    HEURISTIC_EPISODES: int = 6000
+    HEURISTIC_EPISODES: int = 7000
     SELFPLAY_EPISODES: int = 0
     TOTAL_EPISODES: int = RANDOM_EPISODES + HEURISTIC_EPISODES + SELFPLAY_EPISODES + 1
 
@@ -36,7 +36,7 @@ class Config:
 
     # Sort of fixed hyperparameters
     GAMMA: float = 0.99
-    EPSILON_END: float = 0.1
+    EPSILON_END: float = 0.01
     EPSILON_START: float = 1.0
     BATCH_SIZE: int = 64
     # GRAD_CLIP_NORM: float = 1.0
