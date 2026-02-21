@@ -27,14 +27,17 @@ class QNetwork(nn.Module):
     def __init__(self, num_res_blocks=4, channels=64):
         super().__init__()
 
+        # Stem: project input channels up to working channel size
         self.stem = nn.Sequential(
             nn.Conv2d(3, channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(channels),
             nn.ReLU(),
         )
 
+        # Residual block tower
         self.res_blocks = nn.Sequential(*[ResBlock(channels) for _ in range(num_res_blocks)])
 
+        # Output head
         self.fc1 = nn.Linear(channels * Config.BOARD_SIZE * Config.BOARD_SIZE, 256)
         self.fc2 = nn.Linear(256, Config.BOARD_SIZE * Config.BOARD_SIZE)
 
@@ -49,7 +52,6 @@ class QNetwork(nn.Module):
 class DQNAgent:
     def __init__(self):
         self.gamma = Config.GAMMA
-        self.gamma_n = Config.GAMMA**Config.N_STEP  # discounted over n steps
         self.epsilon = Config.EPSILON_START
         self.epsilon_end = Config.EPSILON_END
         self.epsilon_decay = Config.EPSILON_DECAY
@@ -112,13 +114,13 @@ class DQNAgent:
             next_q_target = (
                 self.target_network(next_states).gather(1, next_actions.unsqueeze(1)).squeeze(1)
             )
-            # N-step: discount by gamma^n instead of gamma
-            target_q = rewards + (1 - dones) * self.gamma_n * next_q_target
+            target_q = rewards + (1 - dones) * self.gamma * next_q_target
 
         loss = F.smooth_l1_loss(current_q, target_q)
 
         self.optimizer.zero_grad()
         loss.backward()
+        # torch.nn.utils.clip_grad_norm_(self.q_network.parameters(), Config.GRAD_CLIP_NORM)
         self.optimizer.step()
 
         self.update_counter += 1
@@ -138,3 +140,4 @@ class DQNAgent:
             torch.load(filepath, map_location=self.device, weights_only=True)
         )
         self.target_network.load_state_dict(self.q_network.state_dict())
+

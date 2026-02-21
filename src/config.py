@@ -21,9 +21,6 @@ class Config:
     OUTCOMES_MAXLEN: int = 100  # for tracking recent outcomes
     REWARDS_MAXLEN: int = 100  # for tracking recent rewards
 
-    # N-step returns
-    N_STEP: int = 3  # number of agent steps to look ahead
-
     # Tunable hyperparameters (most -> least impactful)
     """optimal parameters found to be:
     - epsilon decay between 0.995 and 0.996
@@ -59,7 +56,7 @@ class Config:
     LOSS_REWARD: float = -1.0
     DRAW_REWARD: float = 0.0
 
-    STEP_PENALTY: float = -0.05
+    STEP_PENALTY: float = 0.0
 
     # Paths
     MODEL_DIR: str = "./models"
