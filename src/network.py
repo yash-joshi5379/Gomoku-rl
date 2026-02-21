@@ -140,4 +140,3 @@ class DQNAgent:
             torch.load(filepath, map_location=self.device, weights_only=True)
         )
         self.target_network.load_state_dict(self.q_network.state_dict())
-

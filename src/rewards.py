@@ -90,6 +90,33 @@ def get_block_score(game, row, col, opponent_color):
         bwd_count = count_line(game, row, col, -dr, -dc, opponent_color)
         length = 1 + fwd_count + bwd_count
 
+        if length < 3:
+            continue
+
+        # Find the open ends: step past the opponent's line in each direction
+        fwd_tip_r = row + (fwd_count + 1) * dr
+        fwd_tip_c = col + (fwd_count + 1) * dc
+        bwd_tip_r = row + (bwd_count + 1) * (-dr)
+        bwd_tip_c = col + (bwd_count + 1) * (-dc)
+
+        fwd_open = (
+            0 <= fwd_tip_r < Config.BOARD_SIZE
+            and 0 <= fwd_tip_c < Config.BOARD_SIZE
+            and game.board[fwd_tip_r, fwd_tip_c] == Color.EMPTY.value
+        )
+        bwd_open = (
+            0 <= bwd_tip_r < Config.BOARD_SIZE
+            and 0 <= bwd_tip_c < Config.BOARD_SIZE
+            and game.board[bwd_tip_r, bwd_tip_c] == Color.EMPTY.value
+        )
+
+        # The line is only a threat if it had room to grow to 5.
+        # If both remaining ends are blocked, and the line is less than 5 stones long,
+        # the opponent could never have reached 5, meaning this was a dead line 
+        # and blocking it provides no strategic value.
+        if not fwd_open and not bwd_open and length < 5:
+            continue
+
         if length >= 4:
             best_score = max(best_score, Config.BLOCK_FOUR)
         elif length == 3:
