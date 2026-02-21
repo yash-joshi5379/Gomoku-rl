@@ -19,6 +19,9 @@ class Config:
     OUTCOMES_MAXLEN: int = 100  # for tracking recent outcomes
     REWARDS_MAXLEN: int = 100  # for tracking recent rewards
 
+    # N-step returns
+    N_STEP: int = 3  # number of agent steps to look ahead
+
     # Tunable hyperparameters (most -> least impactful)
     """optimal parameters found to be:
     - epsilon decay between 0.995 and 0.996
@@ -39,21 +42,22 @@ class Config:
     BATCH_SIZE: int = 64
     # GRAD_CLIP_NORM: float = 1.0
 
-    OPEN_TWO: float = 0.0    
-    HALF_THREE: float = 0.0  
+    # Offensive - building your own lines
+    OPEN_TWO: float = 0.01   # barely a nudge
+    HALF_THREE: float = 0.02   
+    OPEN_THREE: float = 0.05   
+    HALF_FOUR: float = 0.15   
+    OPEN_FOUR: float = 0.3    
 
-    OPEN_THREE: float = 0.0   
-    HALF_FOUR: float = 0.0    
-    BLOCK_THREE: float = 0.0
-
-    OPEN_FOUR: float = 0.0    
-    BLOCK_FOUR: float = 0.0
+    # Defensive - blocking opponent lines  
+    BLOCK_THREE: float = 0.05
+    BLOCK_FOUR: float = 0.4    # higher than OPEN_FOUR — failing to block a 4 loses the game
 
     WIN_REWARD: float = 1.0
     LOSS_REWARD: float = -1.0
     DRAW_REWARD: float = 0.0
 
-    STEP_PENALTY: float = 0.0
+    STEP_PENALTY: float = -0.05
 
     # Paths
     MODEL_DIR: str = "./models"

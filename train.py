@@ -34,20 +34,35 @@ def load_pool_opponent(checkpoint_path):
 
 
 def select_opponent(pool, opponent_cache):
-    """
-    80/20 rule: pick the newest checkpoint most of the time,
-    occasionally pick a random older one to prevent forgetting.
-    Each checkpoint is loaded from disk exactly once and cached in memory.
-    """
     if len(pool) == 1 or random.random() > Config.OLD_OPPONENT_CHANCE:
-        path = pool[-1]  # newest opponent
+        path = pool[-1]
     else:
-        path = random.choice(pool[:-1])  # random older opponent
+        path = random.choice(pool[:-1])
 
     if path not in opponent_cache:
         opponent_cache[path] = load_pool_opponent(path)
 
     return opponent_cache[path]
+
+
+def flush_nstep_buffer(nstep_buffer, gamma, next_state, done):
+    """
+    Collapse the n-step buffer into a single transition.
+    
+    nstep_buffer contains: [(s0, a0, r0), (s1, a1, r1), ..., (s_{n-1}, a_{n-1}, r_{n-1})]
+    
+    Returns: (s0, a0, R_nstep, next_state, done)
+    where R_nstep = r0 + γ*r1 + γ²*r2 + ... + γ^{n-1}*r_{n-1}
+    """
+    state_0, action_0, _ = nstep_buffer[0]
+
+    # Compute discounted n-step return
+    R = 0.0
+    for i in reversed(range(len(nstep_buffer))):
+        _, _, r_i = nstep_buffer[i]
+        R = r_i + gamma * R
+
+    return (state_0, action_0, R, next_state, done)
 
 
 def play_episode(player, opponent):
@@ -58,11 +73,12 @@ def play_episode(player, opponent):
     agent_color = Color.BLACK if agent_is_black else Color.WHITE
     opponent_color = Color.WHITE if agent_is_black else Color.BLACK
 
-    episode_transitions = []
+    gamma = Config.GAMMA
+    n = Config.N_STEP
 
-    last_agent_state = None
-    last_agent_action = None
-    last_agent_reward = 0.0
+    # n-step buffer holds (state, action_int, reward) for recent agent steps
+    nstep_buffer = deque(maxlen=n)
+    completed_transitions = []
 
     while game.result == GameResult.ONGOING:
         is_agent_turn = (game.current_player == Color.BLACK and agent_is_black) or (
@@ -72,48 +88,63 @@ def play_episode(player, opponent):
         if is_agent_turn:
             current_state = game.get_state_for_network(perspective_color=agent_color)
 
-            if last_agent_state is not None:
-                episode_transitions.append(
-                    (last_agent_state, last_agent_action, last_agent_reward, current_state, False)
-                )
+            # If buffer is full, flush the oldest transition
+            # The "next_state" for that transition is the current state (before we move)
+            if len(nstep_buffer) == n:
+                transition = flush_nstep_buffer(nstep_buffer, gamma, current_state, False)
+                completed_transitions.append(transition)
+                nstep_buffer.popleft()
 
             action = player.select_action(game)
             action_int = game.action_to_int(action)
-            state_before_move = current_state
 
             game.step(action)
 
             step_reward = calculate_shaped_reward(
                 game, action, agent_color.value, opponent_color.value
             )
-
             step_reward += Config.STEP_PENALTY
 
             if game.result != GameResult.ONGOING:
+                # Terminal after agent's move (agent won or draw)
                 final_reward = (
                     Config.WIN_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
-                episode_transitions.append(
-                    (state_before_move, action_int, final_reward, None, True)
-                )
+                # Replace step_reward with terminal reward for this step
+                nstep_buffer.append((current_state, action_int, final_reward))
+
+                # Flush all remaining transitions in the buffer as terminal
+                while len(nstep_buffer) > 0:
+                    transition = flush_nstep_buffer(nstep_buffer, gamma, None, True)
+                    completed_transitions.append(transition)
+                    nstep_buffer.popleft()
             else:
-                last_agent_state = state_before_move
-                last_agent_action = action_int
-                last_agent_reward = step_reward
+                nstep_buffer.append((current_state, action_int, step_reward))
 
         else:
+            # Opponent's turn
             action = opponent.select_action(game)
             game.step(action)
 
             if game.result != GameResult.ONGOING:
+                # Terminal after opponent's move (agent lost or draw)
                 final_reward = (
                     Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
-                episode_transitions.append(
-                    (last_agent_state, last_agent_action, final_reward, None, True)
-                )
 
-    return episode_transitions, game.result, len(game.move_history), agent_is_black
+                if len(nstep_buffer) > 0:
+                    # Overwrite the reward of the most recent agent step
+                    # That was the last move the agent made before losing
+                    last_state, last_action, _ = nstep_buffer[-1]
+                    nstep_buffer[-1] = (last_state, last_action, final_reward)
+
+                    # Flush all remaining as terminal
+                    while len(nstep_buffer) > 0:
+                        transition = flush_nstep_buffer(nstep_buffer, gamma, None, True)
+                        completed_transitions.append(transition)
+                        nstep_buffer.popleft()
+
+    return completed_transitions, game.result, len(game.move_history), agent_is_black
 
 
 def train():
