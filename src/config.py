@@ -6,8 +6,10 @@ class Config:
     RANDOM_SEED: int = 42  # for reproducibility
 
     # Episodes
-    TOTAL_EPISODES: int = 3001
     RANDOM_EPISODES: int = 1000
+    HEURISTIC_EPISODES: int = 6000
+    SELFPLAY_EPISODES: int = 0
+    TOTAL_EPISODES: int = RANDOM_EPISODES + HEURISTIC_EPISODES + SELFPLAY_EPISODES + 1
 
     # Self-play (after random episodes)
     CHECKPOINT_INTERVAL: int = 1000  # episodes between saving a new pool checkpoint
@@ -33,7 +35,7 @@ class Config:
     LEARNING_RATE: float = 1e-4  # 2. controls update magnitude
     TARGET_UPDATE_FREQ: int = 2000  # 3. stability of target
     TRAIN_STEPS_PER_EPISODE: int = 4  # 4. controls learning density
-    BUFFER_CAPACITY: int = 50_000  # 5. not sure, depends on curriculum)
+    BUFFER_CAPACITY: int = 50_000  # CRUCIALLY MUST BE 50K EXACTLY
 
     # Sort of fixed hyperparameters
     GAMMA: float = 0.99

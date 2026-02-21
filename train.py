@@ -9,6 +9,7 @@ from src.logger import Logger
 from src.config import Config
 from src.rewards import calculate_shaped_reward
 from src.symmetry import get_symmetric_transitions
+from src.heuristic import HeuristicAgent
 import random
 import numpy as np
 from tqdm import trange
@@ -16,6 +17,7 @@ from tqdm import trange
 
 class Stage(Enum):
     RANDOM = auto()
+    HEURISTIC = auto()
     SELFPLAY = auto()
 
 
@@ -46,17 +48,8 @@ def select_opponent(pool, opponent_cache):
 
 
 def flush_nstep_buffer(nstep_buffer, gamma, next_state, done):
-    """
-    Collapse the n-step buffer into a single transition.
-
-    nstep_buffer contains: [(s0, a0, r0), (s1, a1, r1), ..., (s_{n-1}, a_{n-1}, r_{n-1})]
-
-    Returns: (s0, a0, R_nstep, next_state, done)
-    where R_nstep = r0 + γ*r1 + γ²*r2 + ... + γ^{n-1}*r_{n-1}
-    """
     state_0, action_0, _ = nstep_buffer[0]
 
-    # Compute discounted n-step return
     R = 0.0
     for i in reversed(range(len(nstep_buffer))):
         _, _, r_i = nstep_buffer[i]
@@ -76,7 +69,6 @@ def play_episode(player, opponent):
     gamma = Config.GAMMA
     n = Config.N_STEP
 
-    # n-step buffer holds (state, action_int, reward) for recent agent steps
     nstep_buffer = deque(maxlen=n)
     completed_transitions = []
 
@@ -88,8 +80,6 @@ def play_episode(player, opponent):
         if is_agent_turn:
             current_state = game.get_state_for_network(perspective_color=agent_color)
 
-            # If buffer is full, flush the oldest transition
-            # The "next_state" for that transition is the current state (before we move)
             if len(nstep_buffer) == n:
                 transition = flush_nstep_buffer(nstep_buffer, gamma, current_state, False)
                 completed_transitions.append(transition)
@@ -106,14 +96,11 @@ def play_episode(player, opponent):
             step_reward += Config.STEP_PENALTY
 
             if game.result != GameResult.ONGOING:
-                # Terminal after agent's move (agent won or draw)
                 final_reward = (
                     Config.WIN_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
-                # Replace step_reward with terminal reward for this step
                 nstep_buffer.append((current_state, action_int, final_reward))
 
-                # Flush all remaining transitions in the buffer as terminal
                 while len(nstep_buffer) > 0:
                     transition = flush_nstep_buffer(nstep_buffer, gamma, None, True)
                     completed_transitions.append(transition)
@@ -122,23 +109,18 @@ def play_episode(player, opponent):
                 nstep_buffer.append((current_state, action_int, step_reward))
 
         else:
-            # Opponent's turn
             action = opponent.select_action(game)
             game.step(action)
 
             if game.result != GameResult.ONGOING:
-                # Terminal after opponent's move (agent lost or draw)
                 final_reward = (
                     Config.LOSS_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
                 )
 
                 if len(nstep_buffer) > 0:
-                    # Overwrite the reward of the most recent agent step
-                    # That was the last move the agent made before losing
                     last_state, last_action, _ = nstep_buffer[-1]
                     nstep_buffer[-1] = (last_state, last_action, final_reward)
 
-                    # Flush all remaining as terminal
                     while len(nstep_buffer) > 0:
                         transition = flush_nstep_buffer(nstep_buffer, gamma, None, True)
                         completed_transitions.append(transition)
@@ -157,6 +139,7 @@ def train():
 
     player = DQNAgent()
     random_opponent = RandomAgent()
+    heuristic_opponent = HeuristicAgent()
     logger = Logger()
     recent_outcomes = deque(maxlen=Config.OUTCOMES_MAXLEN)
     recent_rewards = deque(maxlen=Config.REWARDS_MAXLEN)
@@ -166,19 +149,38 @@ def train():
     opponent_pool = []
     opponent_cache = {}
 
+    heuristic_start = Config.RANDOM_EPISODES
+    selfplay_start = Config.RANDOM_EPISODES + Config.HEURISTIC_EPISODES
+
     for episode in trange(Config.TOTAL_EPISODES):
 
-        # Stage switch
-        if stage == Stage.RANDOM and episode >= Config.RANDOM_EPISODES:
-            stage = Stage.SELFPLAY
+        # Stage transitions
+        if stage == Stage.RANDOM and episode >= heuristic_start:
+            stage = Stage.HEURISTIC
+            recent_outcomes.clear()
+            recent_rewards.clear()
+            recent_moves.clear()
             checkpoint_path = f"{Config.MODEL_DIR}/checkpoint_0.pth"
             player.save_model(checkpoint_path)
+            print(f"\n[{stage.name}] Saved checkpoint_0.pth")
+            print(f"[{stage.name}] Switching to heuristic opponent at episode {episode}")
+
+        if stage == Stage.HEURISTIC and episode >= selfplay_start:
+            stage = Stage.SELFPLAY
+            recent_outcomes.clear()
+            recent_rewards.clear()
+            recent_moves.clear()
+            checkpoint_path = f"{Config.MODEL_DIR}/checkpoint_1.pth"
+            player.save_model(checkpoint_path)
             opponent_pool.append(checkpoint_path)
-            print(f"\n[{stage.name}] Switching to self-play at episode {episode}")
+            print(f"\n[{stage.name}] Saved checkpoint_1.pth")
+            print(f"[{stage.name}] Switching to self-play at episode {episode}")
 
         # Opponent selection
         if stage == Stage.RANDOM:
             opponent = random_opponent
+        elif stage == Stage.HEURISTIC:
+            opponent = heuristic_opponent
         else:
             opponent = select_opponent(opponent_pool, opponent_cache)
 
@@ -200,18 +202,17 @@ def train():
 
         player.decay_epsilon()
 
-        # Stage 2 checkpointing
-        if (
-            stage == Stage.SELFPLAY
-            and (episode + 1 - Config.RANDOM_EPISODES) % Config.CHECKPOINT_INTERVAL == 0
-        ):
-            checkpoint_idx = len(opponent_pool)
-            checkpoint_path = f"{Config.MODEL_DIR}/checkpoint_{checkpoint_idx}.pth"
-            player.save_model(checkpoint_path)
-            opponent_pool.append(checkpoint_path)
-            print(
-                f"\n[{stage.name}] Saved checkpoint_{checkpoint_idx}.pth (pool size: {len(opponent_pool)})"
-            )
+        # Self-play checkpointing
+        if stage == Stage.SELFPLAY:
+            selfplay_episode = episode - selfplay_start
+            if (selfplay_episode + 1) % Config.CHECKPOINT_INTERVAL == 0:
+                checkpoint_idx = len(opponent_pool) + 1  # starts at 2 (0=random, 1=heuristic)
+                checkpoint_path = f"{Config.MODEL_DIR}/checkpoint_{checkpoint_idx}.pth"
+                player.save_model(checkpoint_path)
+                opponent_pool.append(checkpoint_path)
+                print(
+                    f"\n[{stage.name}] Saved checkpoint_{checkpoint_idx}.pth (pool size: {len(opponent_pool)})"
+                )
 
         # Process outcome
         won = (result == GameResult.BLACK_WIN and agent_is_black) or (
@@ -238,9 +239,9 @@ def train():
         recent_moves.append(num_moves)
 
         if (episode + 1) % Config.PRINT_FREQUENCY == 0:
-            wr = recent_outcomes.count("W") / len(recent_outcomes)
-            lr = recent_outcomes.count("L") / len(recent_outcomes)
-            dr = recent_outcomes.count("D") / len(recent_outcomes)
+            wr = recent_outcomes.count("W") / len(recent_outcomes) if recent_outcomes else 0
+            lr = recent_outcomes.count("L") / len(recent_outcomes) if recent_outcomes else 0
+            dr = recent_outcomes.count("D") / len(recent_outcomes) if recent_outcomes else 0
             avg_reward = np.mean(recent_rewards) if recent_rewards else 0.0
             avg_moves = np.mean(recent_moves) if recent_moves else 0.0
 
