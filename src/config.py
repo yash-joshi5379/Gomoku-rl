@@ -6,13 +6,12 @@ class Config:
     RANDOM_SEED: int = 42  # for reproducibility
 
     # Episodes
-    TOTAL_EPISODES: int = 6805
-    RANDOM_EPISODES: int = 800
+    TOTAL_EPISODES: int = 3001
+    RANDOM_EPISODES: int = 1000
 
     # Self-play (after random episodes)
-    CHECKPOINT_INTERVAL: int = 3000  # episodes between saving a new pool checkpoint
+    CHECKPOINT_INTERVAL: int = 1000  # episodes between saving a new pool checkpoint
     OPPONENT_EPSILON: float = 0.02  # forced epsilon for all frozen pool opponents
-    RANDOM_COMPLETE: float = 0.95  # win rate vs random that triggers phase switch
     OLD_OPPONENT_CHANCE: float = 0.20  # probability of picking an old opponent (not N-1)
 
     # Printing/logging
@@ -40,21 +39,21 @@ class Config:
     BATCH_SIZE: int = 64
     # GRAD_CLIP_NORM: float = 1.0
 
-    # Threat rewards (own stones) - open = both ends free, half = one end blocked
-    OPEN_TWO: float = 0.01  # 2 in a row, both ends open
-    HALF_THREE: float = 0.015  # 3 in a row, one end open
-    OPEN_THREE: float = 0.03  # 3 in a row, both ends open
-    HALF_FOUR: float = 0.03  # 4 in a row, one end open
-    OPEN_FOUR: float = 0.05  # 4 in a row, both ends open
+    OPEN_TWO: float = 0.0    
+    HALF_THREE: float = 0.0  
 
-    # Block rewards (opponent threats) - ordered by urgency
-    BLOCK_THREE: float = 0.04  # block opponent's open 3
-    BLOCK_FOUR: float = 0.10  # block opponent's 4 (open or half) - highest priority
+    OPEN_THREE: float = 0.0   
+    HALF_FOUR: float = 0.0    
+    BLOCK_THREE: float = 0.04
 
-    # Terminal rewards
+    OPEN_FOUR: float = 0.05    
+    BLOCK_FOUR: float = 0.1
+
     WIN_REWARD: float = 1.0
     LOSS_REWARD: float = -1.0
     DRAW_REWARD: float = 0.0
+
+    STEP_PENALTY: float = -0.1
 
     # Paths
     MODEL_DIR: str = "./models"

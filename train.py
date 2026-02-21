@@ -87,6 +87,8 @@ def play_episode(player, opponent):
                 game, action, agent_color.value, opponent_color.value
             )
 
+            step_reward += Config.STEP_PENALTY
+
             if game.result != GameResult.ONGOING:
                 final_reward = (
                     Config.WIN_REWARD if game.result != GameResult.DRAW else Config.DRAW_REWARD
