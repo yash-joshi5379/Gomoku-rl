@@ -3,6 +3,7 @@ import torch
 import os
 from src.game import GomokuGame, GameResult, Color
 from src.network import DQNAgent
+from src.network import QNetwork
 from src.logger import GameLogger
 from src.config import Config
 import random
@@ -43,7 +44,58 @@ class HeuristicAgent:
                     return(r,c)   #i added random to make it slightly unpredictable
         
         return random.choice(legal_actions)
+
+class SelfPlayOpponent: 
+    def __init__(self, model_dir, device): 
+        self.model_dir = model_dir
+        self.device = device 
+        self.network = QNetwork().to(device)
+        self.has_model = False
+        self.update_model() 
     
+    #to load a previously saved model to play as the opponent 
+    def update_model(self):
+        if not os.path.exists(self.model_dir):
+            return
+        
+        models = [f for f in os.listdir(self.model_dir) if f.startswith("player_ep") and f.endswith(".pth")]
+        if models:
+            chosen_model = random.choice(models)
+            model_path = os.path.join(self.model_dir, chosen_model)
+            try:
+                self.network.load_state_dict(torch.load(model_path, map_location=self.device))
+                self.network.eval()
+                self.has_model = True 
+            except Exception as e: 
+                print(f"Couldnt load self play model {chosen_model}: {e}")
+
+    def select_action(self, game):
+        legal_actions = game.get_legal_actions()
+        if not legal_actions:
+            return None
+        
+        if not self.has_model:
+            return random.choice(legal_actions)
+        
+        if random.random() < 0.1:
+            return random.choice(legal_actions)
+        
+        state = game.get_state_for_network(persepctive_color=game.current_player)
+        state_tensor = torch.FloatTensor(state).unsqueeze(0).to(self.device)
+
+        with torch.no_grad():
+            q_values = self.network(state_tensor).cpu().numpy()[0]
+
+        legal_q_values = [(a, q_values[game.action_to_int(a)]) for a in legal_actions]
+
+        best_action = max(legal_q_values, key=lambda x: x[1])[0]
+        
+        return best_action
+
+
+
+        
+
 def count_line(game, row, col, dr, dc, color):
     """Count consecutive stones of given color in one direction from (row, col)"""
     count = 0
@@ -246,6 +298,7 @@ def train():
 
     player = DQNAgent()
     random_opponent = RandomAgent()
+    self_play_opponent = SelfPlayOpponent(Config.MODEL_DIR, player.device)
     logger = GameLogger()
 
     win_count = 0
@@ -266,7 +319,7 @@ def train():
         agent_is_black = random.random() < 0.5 
         opponent_color = Color.WHITE.value if agent_is_black else Color.BLACK.value
 
-
+        '''
         if progress < 0.2:
             opponent = random_opponent
         elif progress < 0.6:
@@ -279,7 +332,27 @@ def train():
 
         # transitions, result, num_moves, agent_is_black = play_episode(player, opponent)
         transitions, result, num_moves, _ = play_episode(player, opponent, agent_is_black)
+        '''
+        # Update self-play model every 500 episodes
+        if episode > 0 and episode % 500 == 0:
+            self_play_opponent.update_model()
 
+        if progress < 0.2:
+            opponent = random_opponent
+        elif progress < 0.5:
+            # Mix in Heuristic to bridge the gap
+            if random.random() < 0.5:
+                opponent = random_opponent
+            else:
+                opponent = HeuristicAgent(opponent_color)
+        else:
+            # If self-play model exists, use it. Otherwise, fallback to Heuristic.
+            if self_play_opponent.has_model:
+                opponent = self_play_opponent
+            else:
+                opponent = HeuristicAgent(opponent_color)
+
+        transitions, result, num_moves, _ = play_episode(player, opponent, agent_is_black)
 
         # Store all transitions
         for state, action, reward, next_state, done in transitions:
